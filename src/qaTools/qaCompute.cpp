@@ -37,7 +37,7 @@ typedef struct
   bool spanCov,silent;
   uint32_t subsam_seed;
   double subsample;
-  FILE* detailed,*profile,*specific,*regionDef;
+  FILE* detailed,*profile
 }Options;
 
 typedef struct
@@ -84,7 +84,7 @@ static int print_usage()
   fprintf(stderr, "Options: \n");
   fprintf(stderr, "         -m            Also compute median coverage\n");
   fprintf(stderr, "         -q            Quality threshold. (min quality to consider) [1].\n");
-  fprintf(stderr, "         -d            Print per-chromosome histogram [<output.out>.detail]\n");            
+  fprintf(stderr, "         -d            Print per-chromosome histogram [<output.out>.detail]\n");
   fprintf(stderr, "         -p [INT]      Print coverage profile at INT window size to bed file [<output.out>.profile] [50000]\n");
   fprintf(stderr, "         -x [STR]      Print coverage over the features in STR. Should be of format: Chr<TAB>Start<TAB>End<TAB>Alias\n");
   fprintf(stderr, "         -a [FLOAT]    Subsample reads with probability [FLOAT]. [1.0]\n");
@@ -95,31 +95,6 @@ static int print_usage()
   fprintf(stderr, "\n");
   fprintf(stderr, "Note: Input file should be sorted\n\n");
   return 1;
-}
-
-static void specific_print_cov(FILE* outputFile, int* data, char* name, const uint32_t chrSize)
-{
-  //Are we at all interested in this contig?
-  std::map<std::string,std::list<Interval> >::iterator it = iMap.find(std::string(name));
-  if (it != iMap.end()) {//We apparently care
-	//For each thing in this list, compute the average
-	std::list<Interval>::iterator i = it->second.begin();
-	uint64_t covSum = 0;
-	uint32_t c;
-	while (i != it->second.end()) {
-	  covSum = 0;
-	  if (i->end > chrSize) {
-	    fprintf(stderr,"Your intervals seem to hang over the edge of the contigs. will be segfaulting now\n");
-	  }
-	  for (c=i->start; c<=i->end; ++c) {
-	    covSum += data[c];
-	  }
-	  fprintf(outputFile,"%s\t%4.5f\n",i->alias.c_str(),(double)covSum/(i->end-i->start+1));
-	  ++i;
-	}
-	//Now that we're done with this, we should really drop it
-	iMap.erase(it);
-  }
 }
 
 static void compute_print_cov(FILE* outputFile, Options userOpt, int* data, char* name,const uint32_t chrSize, uint64_t* coverageHist,const int currentTid)
@@ -164,11 +139,6 @@ static void compute_print_cov(FILE* outputFile, Options userOpt, int* data, char
 
   }
 
-  //Do we want specific intervals?
-  if (userOpt.specific != NULL) {
-    specific_print_cov(userOpt.specific,data,name,chrSize);
-  }
-
   //Print coverage profile?
   if (userOpt.profile != NULL) {
     wSum = data[0];
@@ -193,7 +163,7 @@ static void compute_print_cov(FILE* outputFile, Options userOpt, int* data, char
     fprintf(userOpt.detailed,"%s\t%d\t",name,chrSize);
     for (int i=1; i<=userOpt.maxCoverage; ++i) {
         uint64_t coverage = 0;
-        //All that has been covered i, had been covered i+1, i+2 and so on times. Thus, do this addition                                              
+        //All that has been covered i, had been covered i+1, i+2 and so on times. Thus, do this addition
 	for (int x = i; x<=userOpt.maxCoverage; ++x) coverage += localCoverageHist[x];
         fprintf(userOpt.detailed, "%d\t", int(coverage));
     }
@@ -263,15 +233,15 @@ void printSkipped(FILE* outputFile, Options userOpt, bam_hdr_t* head, int start,
 }
 
 /**
- * Open a .sam/.bam file. 
+ * Open a .sam/.bam file.
  * @returns NULL is open failed.
  */
 htsFile* open_alignment_file(std::string path)
 {
   std::string flag = "r";
-  //  if (path.substr(path.size()-3).compare("bam") == 0) {                                                                                                                                               
-    //BAM file!                                                                                                                                    
-    flag += "b";                                                                                                                                                                                                             
+  //  if (path.substr(path.size()-3).compare("bam") == 0) {
+    //BAM file!
+    flag += "b";
     //}
   htsFile* fp = sam_open(path.c_str(), flag.c_str());
   if (!fp) {
@@ -292,10 +262,6 @@ int main(int argc, char *argv[])
   userOpt.maxCoverage = 30;
   userOpt.windowSize = 50000;
   userOpt.profile = NULL;
-  //Pointer to file for storing specific interval coverages
-  userOpt.specific = NULL;
-  //File that defines the regions to be computed
-  userOpt.regionDef = NULL;
   userOpt.spanCov = false;
   userOpt.silent = false;
   userOpt.detailed = NULL;
@@ -308,15 +274,15 @@ int main(int argc, char *argv[])
   std::map<std::string,std::list<Interval> > intervalMap;
   int arg;
   char *q;
-  //Get args                                                                                                                                               
-  while ((arg = getopt(argc, argv, "mdip:s:q:c:h:x:a:")) >= 0) {
+  //Get args
+  while ((arg = getopt(argc, argv, "mdip:s:q:c:h:a:")) >= 0) {
     switch (arg) {
     case 'm': userOpt.doMedian = 1; break;
     case 'd': doDetail = true; break;
     case 'i': userOpt.silent = true; break;
     case 'q': userOpt.minQual = atoi(optarg); break;
     case 'c': userOpt.maxCoverage = atoi(optarg); break;
-    case 'a': 
+    case 'a':
       if ((userOpt.subsam_seed = strtol(optarg, &q, 10)) != 0) {
 	srand(userOpt.subsam_seed);
 	userOpt.subsam_seed = rand();
@@ -333,19 +299,9 @@ int main(int argc, char *argv[])
       userOpt.maxInsert = atoi(optarg);
       fprintf(stdout,"Max insert size %d\n",userOpt.maxInsert);
       break;
-    case 'x': userOpt.regionDef = fopen(optarg,"r");
-	if (userOpt.regionDef == 0) {
-	   fprintf(stderr,"Unable to open region definition file %s\n",optarg);
-	   return -1;
-	}
 	//Read all of this in
 	int s,e;
 	char n[10000],a[10000];
-	while (fscanf(userOpt.regionDef,"%s\t%d\t%d\t%s",&n,&s,&e,&a) != EOF) {
-	    Interval i;
-	    i.start = s; i.end=e; i.alias = a;
-	    iMap[std::string(n)].push_back(i);
-	}
 	break;
     default:
       fprintf(stderr,"Read wrong argument %d with value %s\n",arg,optarg);
@@ -394,15 +350,6 @@ int main(int argc, char *argv[])
       fprintf(stderr,"qaCompute: Unable to create profile output file %s. Profile will not be printed!\n",fName.c_str());
     }
   }
-  if (userOpt.regionDef != NULL) {//Create specific output file
-    std::string fName = argv[optind+1];
-    fName += ".specific";
-    userOpt.specific = fopen(fName.c_str(),"wt");
-    if (userOpt.specific == NULL) {
-      fprintf(stderr,"qaCompute: Unable to create specific output file %s. Specific coverage will not be printed!\n",fName.c_str());
-    }
-    fclose(userOpt.regionDef);
-  }
 
     //Initialize bam entity
     bam1_t *b = bam_init1();
@@ -417,10 +364,10 @@ int main(int argc, char *argv[])
     uint32_t interChr = 0;
     uint32_t duplicates = 0;
     uint32_t usedReads = 0;
- 
+
     int *entireChr = NULL;
     //Keep header for further reference
-    
+
     //Compute genome length
     for (int i=0; i<head->n_targets; ++i) {
     	totalGenomeLength += head->target_len[i];
@@ -429,7 +376,7 @@ int main(int argc, char *argv[])
     int32_t currentTid = -1;
 
     //Create "map" vector for histogram
-    uint64_t* coverageHist= (uint64_t*)malloc((userOpt.maxCoverage+1)*sizeof(uint64_t)); 
+    uint64_t* coverageHist= (uint64_t*)malloc((userOpt.maxCoverage+1)*sizeof(uint64_t));
     memset( coverageHist, 0, (userOpt.maxCoverage+1)*sizeof(uint64_t));
 
     //Write file table header
@@ -439,7 +386,7 @@ int main(int argc, char *argv[])
       fprintf(outputFile, "Chromosome\tSeq_lem\tAvg_Cov\n");
 
     while (sam_read1(fp, head, b) >= 0) {
-      
+
       //uint32_t* cigar = bam1_cigar(b);
       //Get bam core.
       const bam1_core_t *core = &b->core;
@@ -463,12 +410,12 @@ int main(int argc, char *argv[])
       else {
 
 	if (core->tid != currentTid) {
-	  
+
 	  if (core->tid == -1) {//This read is not actually mapped..ufff
             fprintf(stderr, "Read a read that has mapped flags, but isn't actually mapped: %s\nTrying to recover\n", bam_get_qname(b));
 	    ++unmappedReads;
 	    ++totalNumberOfReads;
-            //Skip 
+            //Skip
             continue;
           }
 
@@ -480,7 +427,7 @@ int main(int argc, char *argv[])
 	    compute_print_cov(outputFile, userOpt, entireChr, head->target_name[currentTid], chrSize, coverageHist, currentTid);
 	  }
 
-	  //Get length of next section                                                                                       
+	  //Get length of next section
           chrSize = head->target_len[core->tid];
 	  if (chrSize < 1) {//We can't have such sizes! this can't be right
 	    fprintf(stderr,"%s has size %d, which can't be right!\nCheck bam header!",head->target_name[core->tid],chrSize);
@@ -489,7 +436,7 @@ int main(int argc, char *argv[])
 	  //Done with current section.
 	  //Allocate memory
 	  entireChr = (int*)realloc(entireChr, (chrSize+1)*sizeof(int));
-	  
+
 	  if (entireChr == NULL) {
 	    fprintf(stderr,"Allocation failed! \n");
 	    return -1;
@@ -511,9 +458,9 @@ int main(int argc, char *argv[])
 	  }
 	  if (!userOpt.silent)
 		  printf("Computing %s of size %u... \n",head->target_name[core->tid],chrSize);
-	
+
 	}
-	
+
 	//If read has quality == 0, we won't count it as mapped
 	if (core->qual >= userOpt.minQual) {
 	 if (core->flag&BAM_FPROPER_PAIR) {
@@ -558,7 +505,7 @@ int main(int argc, char *argv[])
          //else
          //  --entireChr[core->pos+core->l_qseq];
 	   } else {
-	     //Computing span coverage. 
+	     //Computing span coverage.
 	     //Only consider first read in pair! and extend a bit to the end of the insert
 	     if ((core->flag&BAM_FREAD1) //First in pair
 		 && !(core->flag&BAM_FMUNMAP) /*Mate is also mapped!*/
@@ -589,7 +536,7 @@ int main(int argc, char *argv[])
       }
 
       ++totalNumberOfReads;
-      
+
     }
 
     //Compute coverage for the last "chromosome"
@@ -600,19 +547,6 @@ int main(int argc, char *argv[])
     if (currentTid != head->n_targets) {//Print to that.
     	printSkipped(outputFile,userOpt,head,currentTid+1,head->n_targets);
 	}
-
-    //Print all the stuff left in the iMap if there were any specifics to be printed
-    if (userOpt.specific != NULL) {
-	std::map<std::string,std::list<Interval> >::iterator it = iMap.begin();
-	while (it != iMap.end()) {
-	    std::list<Interval>::iterator i = it->second.begin();
-	    while (i != it->second.end()) {
-		fprintf(userOpt.specific,"%s\t%4.5f\n",i->alias.c_str(),0.0);
-		++i;
-            }
-	    ++it;
-	}
-    }
 
     bam_destroy1(b);
     free(entireChr);
@@ -641,7 +575,7 @@ int main(int argc, char *argv[])
 
     fprintf(outputFile,"\nOther\n");
 
-    //Printout procentage of mapped/unmapped reads                                                                                                     
+    //Printout procentage of mapped/unmapped reads
     double procentageOfUnmapped = 100*((double)unmappedReads/totalNumberOfReads);
     double procentageOfZeroQuality = 100*((double)zeroQualityReads/totalNumberOfReads);
     fprintf(outputFile,"Total number of reads: %u\n", totalNumberOfReads);
@@ -657,25 +591,22 @@ int main(int argc, char *argv[])
     }
 
     //printf("Out of %u reads, you have %3.5f unmapped reads\n and %3.5f sub-par quality mappings\n", totalNumberOfReads ,procentageOfUnmapped, procentageOfZeroQuality);
-    
+
 
     free(coverageHist);
 
-  
+
     fclose(outputFile);
     if (outsideHeader) {
       hts_close(headerF);
     }
     hts_close(fp);
-    
+
     if (userOpt.detailed)
       fclose(userOpt.detailed);
 
     if (userOpt.profile)
       fclose(userOpt.profile);
-	
-    if (userOpt.specific)
-      fclose(userOpt.specific);
-  
+
   return 0;
 }
