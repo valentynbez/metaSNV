@@ -38,104 +38,6 @@ def run_sample(sample, command):
     return sample, command, ret
 
 
-def compute_opt(args):
-    out_dir = path.join(args.project_dir, 'cov')
-    os.makedirs(out_dir, exist_ok=True)
-    p = multiprocessing.Pool(args.threads, init_worker)
-    results = []
-    for line in open(args.all_samples):
-        line = line.rstrip()
-        name = path.basename(line)
-        cmd = ['{}/src/qaTools/qaCompute'.format(basedir),
-               '-c', '10', '-d',
-               '-i', line, '{}/{}.cov'.format(out_dir, name)]
-        if args.print_commands:
-            print(" ".join(cmd))
-        else:
-            results.append(p.apply_async(run_sample, (name, cmd)))
-
-    p.close()
-    p.join()
-    for r in results:
-        sample, command, ret = r.get()
-        if ret:
-            stderr.write("Failure in sample {}".format(sample))
-            stderr.write("Call to {} failed.".format(' '.join(cmd)))
-            exit(1)
-
-
-def get_header(args):
-    use = open(args.all_samples).readline().rstrip()
-    o = subprocess.check_output(["samtools", "view", "-H", use]).decode("utf-8")
-    f = open(args.project_dir + '/bed_header', 'w')
-    for line in o.split('\n')[1:]:
-        line = line.rstrip().split('\t')
-        if len(line) != 3:
-            continue
-        if line[0] == "@SQ":
-            line[1] = line[1].replace('SN:', '')
-            line[2] = line[2].replace('LN:', '')
-            f.write(line[1]+'\t1\t'+line[2]+'\n')
-    f.close()
-    args.ctg_len = args.project_dir + '/bed_header'
-
-
-def compute_summary(args):
-    '''This information is required by metaSNV_Filtering.py'''
-
-    project_name = path.basename(args.project_dir)
-    cov_dir = path.join(args.project_dir, 'cov')
-    cov_files = glob(cov_dir + '/*.cov')
-
-    if not cov_files:
-        if not args.print_commands:
-            stderr.write("Coverage files not found.\n")
-        else:
-            stderr.write("Coverage files not found.\n"
-                         "Finish running the commands printed above and then run this command again.\n")
-        exit(1)
-    for f in cov_files:
-        cmd = [sys.executable,
-               path.join(basedir, 'src/computeGenomeCoverage.py'),
-               f,
-               f + '.detail',
-               f + '.summary']
-        subprocess.call(cmd)
-    print("\nCoverage summary here: {}".format(args.project_dir))
-    print("	Average vertical genome coverage: '{}/{}.all_cov.tab'".format(args.project_dir, project_name))
-    print("	Horizontal genome coverage (1X): '{}/{}.all_perc.tab'".format(args.project_dir, project_name))
-    print("")
-    cmd = [sys.executable,
-           '{}/src/collapse_coverages.py'.format(basedir),
-           args.project_dir]
-    subprocess.call(cmd)
-
-
-def split_opt(args):
-    if args.n_splits > 100:
-        stderr.write("Maximum number of splits is 100.\n")
-        args.n_splits = 100
-
-    older_files = glob(args.project_dir + '/bestsplits/*')
-    if older_files:
-        stderr.write("\nremoving old splits.\n")
-        for f in older_files:
-            os.unlink(f)
-
-    project_name = path.basename(args.project_dir)
-
-    print("\nCalculating best database split:")
-    # usage createOptimumSplit.sh <all_cov.tab> <all_perc.tab> <geneDefinitions> <INT_NrSplits> <.outfile>
-    cmd = [sys.executable,
-           '{}/src/createOptimumSplit.py'.format(basedir),
-           "{}/{}.all_cov.tab".format(args.project_dir, project_name),
-           "{}/{}.all_perc.tab".format(args.project_dir, project_name),
-           args.ctg_len,
-           str(args.n_splits),
-           path.join(args.project_dir, "bestsplits", "best_split")]
-    subprocess.call(cmd)
-
-
 def execute_snp_call(args, snpCaller, ifile, ofile, bam_filepaths):
     db_ann_args = []
     if args.db_ann != '':
@@ -215,7 +117,7 @@ SOLUTION: run getRefDB.sh or set up a custom database before running metaSNP cal
         parser.print_help()
         exit(1)
 
-    if not path.isfile(basedir+"/metaSNV/qaTools/qaCompute") or not path.isfile(basedir+"/metaSNV/snpCaller/snpCall"):
+    if not path.isfile(basedir+"/metaSNV/snpCaller/snpCall"):
         stderr.write('''
 ERROR:  No binaries found
 
