@@ -2,6 +2,3 @@
 
 HTSLIB_CFLAGS := $(shell pkg-config htslib --cflags)
 HTSLIB_LIBS := $(shell pkg-config htslib --libs)
-
-# For boost, only includes are necessary:
-BOOST_CFLAGS :=

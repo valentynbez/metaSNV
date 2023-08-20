@@ -37,7 +37,7 @@ typedef struct
   bool spanCov,silent;
   uint32_t subsam_seed;
   double subsample;
-  FILE* detailed,*profile
+  FILE* detailed,*profile;
 }Options;
 
 typedef struct
@@ -97,6 +97,7 @@ static int print_usage()
   return 1;
 }
 
+// compute_print_cov(outputFile, userOpt, entireChr, head->target_name[currentTid], chrSize, coverageHist, currentTid);
 static void compute_print_cov(FILE* outputFile, Options userOpt, int* data, char* name,const uint32_t chrSize, uint64_t* coverageHist,const int currentTid)
 {
   //clock_t start = clock();

@@ -142,9 +142,11 @@ def relevant_taxa(args):
                 if sample_count == len(header_cov) and len(sample_names) >= args.m:
                     samples_of_interest[cov_taxID] = sample_names
 
-    return {'SoI': samples_of_interest, 'h': header_cov}  # return dict()
     COV.close()
     PER.close()
+
+    return {'SoI': samples_of_interest, 'h': header_cov}  # return dict()
+
 
 
 # ======================================================================================================================

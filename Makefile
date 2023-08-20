@@ -1,11 +1,11 @@
 all: qaTools snpCaller
 clean:
-	cd src/qaTools && $(MAKE) clean
-	cd src/snpCaller && $(MAKE) clean
+	cd metaSNV/qaTools && $(MAKE) clean
+	cd metaSNV/snpCaller && $(MAKE) clean
 
 qaTools:
-	cd src/$@ && $(MAKE)
+	cd metaSNV/$@ && $(MAKE)
 snpCaller:
-	cd src/$@ && $(MAKE)
+	cd metaSNV/$@ && $(MAKE)
 
 .PHONY: all clean

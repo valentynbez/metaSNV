@@ -11,28 +11,14 @@ import shutil
 import subprocess
 import multiprocessing
 
+from metaSNV.utils import create_output_folder
+from metaSNV.bam_preprocessing import BAMInfo, write_legacy
+from multiprocessing import Pool
+
+
 basedir = os.path.dirname(os.path.abspath(__file__))
 
 
-def mkdir_p(dirname):
-    '''Equivalent to 'mkdir -p' on the command line'''
-    from os import makedirs
-    try:
-        makedirs(dirname)
-    except OSError:
-        pass
-
-
-def create_directories(basedir):
-    mkdir_p(basedir)
-    for sub in ['cov',
-                'bestsplits',
-                'snpCaller',
-                'filtered',
-                'filtered/pop',
-                'filtered/ind',
-                'distances']:
-        mkdir_p(path.join(basedir, sub))
 
 
 def exit_worker(signum, frame):
@@ -54,7 +40,7 @@ def run_sample(sample, command):
 
 def compute_opt(args):
     out_dir = path.join(args.project_dir, 'cov')
-    mkdir_p(out_dir)
+    os.makedirs(out_dir, exist_ok=True)
     p = multiprocessing.Pool(args.threads, init_worker)
     results = []
     for line in open(args.all_samples):
@@ -150,19 +136,13 @@ def split_opt(args):
     subprocess.call(cmd)
 
 
-def execute_snp_call(args, snpCaller, ifile, ofile, split):
+def execute_snp_call(args, snpCaller, ifile, ofile, bam_filepaths):
     db_ann_args = []
     if args.db_ann != '':
         db_ann_args = ['-g', args.db_ann]
-    split_args = []
-    if split:
-        split_args = ['-l', str(split)]
     samtools_cmd = ['samtools',
                     'mpileup',
-                    '-f', args.ref_db
-                    ] + split_args + [
-                        '-B',
-                        '-b', args.all_samples]
+                    '-f', args.ref_db, '-B', *bam_filepaths]
     snpcaller_cmd = [
         snpCaller, '-f', args.ref_db] + db_ann_args + [
             '-i', ifile, '-c', str(args.min_pos_cov), '-t', str(args.min_pos_snvs)]
@@ -176,13 +156,11 @@ def execute_snp_call(args, snpCaller, ifile, ofile, split):
             return snpcaller_call.wait()
 
 
-def snp_call(args):
+def snp_call(args, bam_filepaths):
     out_dir = path.join(args.project_dir, 'snpCaller')
     os.makedirs(out_dir, exist_ok=True)
 
-    shutil.copy(args.all_samples, args.project_dir+'/all_samples')
-
-    snpCaller = basedir + "/src/snpCaller/snpCall"
+    snpCaller = basedir + "/metaSNV/snpCaller/snpCall"
 
     indiv_out = path.join(out_dir, "indiv_called")
     called_SNP = path.join(out_dir, "called_SNPs")
@@ -193,39 +171,18 @@ def snp_call(args):
 #       Note: Different phred score scales might be disregarded.
 #       Note: If samtools > v0.1.18 is used -Q 20 filtering is highly recommended.
 
-    threads = (args.threads if not args.print_commands else 1)
-    p = multiprocessing.Pool(threads, init_worker)
-    results = []
-    if args.n_splits > 1:
-        splits = glob('{}/bestsplits/best_split_*'.format(args.project_dir))
-        for split in splits:
-            results.append(p.apply_async(execute_snp_call,
-                                         (args,
-                                          snpCaller,
-                                          '{}.{}'.format(indiv_out, path.basename(split)),
-                                          '{}.{}'.format(called_SNP, path.basename(split)),
-                                          split)))
-        p.close()
-        p.join()
-        for r in results:
-            v = r.wait()
-            if v is not None:
-                if v > 0:
-                    stderr.write("SNV calling failed")
-                    exit(1)
-    else:
-        v = execute_snp_call(args, snpCaller, indiv_out, called_SNP, None)
-        if v is not None:
-            if v > 0:
-                stderr.write("SNV calling failed")
-                exit(1)
+    v = execute_snp_call(args, snpCaller, indiv_out, called_SNP, bam_filepaths)
+    if v is not None:
+        if v > 0:
+            stderr.write("SNV calling failed")
+            exit(1)
 
 
 def main():
     parser = argparse.ArgumentParser(description='Compute SNV profiles')
     parser.add_argument('project_dir', metavar='DIR',
                         help='The output directory that metaSNV will create e.g. "outputs". Can be a path.')
-    parser.add_argument('all_samples', metavar='FILE',
+    parser.add_argument('input_folder', metavar='INPUT_DIR',
                         help='File with an input list of bam files, one file per line')
     parser.add_argument("ref_db", metavar='REF_DB_FILE',
                         help='reference multi-sequence FASTA file used for the alignments.')
@@ -258,7 +215,7 @@ SOLUTION: run getRefDB.sh or set up a custom database before running metaSNP cal
         parser.print_help()
         exit(1)
 
-    if not path.isfile(basedir+"/src/qaTools/qaCompute") or not path.isfile(basedir+"/src/snpCaller/snpCall"):
+    if not path.isfile(basedir+"/metaSNV/qaTools/qaCompute") or not path.isfile(basedir+"/metaSNV/snpCaller/snpCall"):
         stderr.write('''
 ERROR:  No binaries found
 
@@ -275,21 +232,29 @@ SOLUTION: Install samtools or add it to $PATH\n\n''')
     if args.threads > 1 and args.n_splits == 1:
         args.n_splits = args.threads
 
-    if path.exists(args.project_dir) and not args.print_commands and not args.use_prev_cov:
-        stderr.write("Project directory '{}' already exists\n\n\n".format(args.project_dir))
-        exit(1)
+    create_output_folder(args.project_dir)
 
-    create_directories(args.project_dir)
+    # if not args.use_prev_cov:
+    #     compute_opt(args)
+    #     compute_summary(args)
 
-    if not args.use_prev_cov:
-        compute_opt(args)
-        compute_summary(args)
+    # get_header(args)
 
-    get_header(args)
+    # alternative
+    files = sorted([f for f in os.listdir(args.input_folder) if f.endswith('.bam')])
+    bam_filepaths = [os.path.join(args.input_folder, f) for f in files]
+    with Pool(args.threads) as p:
+        results = p.map(BAMInfo.from_bam, bam_filepaths)
 
-    if args.n_splits > 1:
-        split_opt(args)
-    snp_call(args)
+    results_dict = {bam_info.sample : bam_info for bam_info in results}
+    # sort by key
+    results_dict = {k: results_dict[k] for k in sorted(results_dict)}
+
+    project_name = path.basename(args.project_dir)
+    write_legacy(results_dict, "{}/{}.all_cov.tab".format(args.project_dir, project_name), "depth")
+    write_legacy(results_dict, "{}/{}.all_perc.tab".format(args.project_dir, project_name), "breadth")
+
+    snp_call(args, bam_filepaths)
 
 
 if __name__ == '__main__':

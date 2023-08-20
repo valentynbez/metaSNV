@@ -349,13 +349,6 @@ int main(int argc, char** argv) {
             case 'h':		// help message
                 print_usage();
                 return -1;
-            case 'a':		// unused flag
-                break;
-            case 'd':         // Debug switch not working!
-                if (optopt == 'd')
-                    use_debug();
-                break;
-            case 'b':		// TODO: list of bam files for header generation [optional]
                 break;
             case 'f':		//reference fasta file [required]
                 genomes = fopen(optarg, "r");
@@ -409,16 +402,10 @@ int main(int argc, char** argv) {
                 abort ();
         }
 
-    // Fish out non option arguments
-    for (index = optind; index < argc; index++){
-        printf ("Non-option argument %s\n", argv[index]);
-        return 0;
-    }
-
-
 
     //TODO: do the counting and generate header from bam file
-    //fgets(line,READ_BUFFER_SIZE,stdin) //gets the very first line of the pileup (drops it!)
+    //fgets(line,READ_BUFFER_SIZE,stdin)
+    //gets the very first line of the pileup (drops it!)
 
     fgets(line,READ_BUFFER_SIZE,stdin);
     unsigned int number_of_tabs = 0;
