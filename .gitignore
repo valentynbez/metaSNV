@@ -1,7 +1,11 @@
-# Custom additions to facilitate testing
+# Custom additions
+.vscode/
+database/
+testdata/*
+output/*
+reference_output/*
+.github/
 
-testdata*/
-output*/
 
 # Standard files for OS and languages used in this project
 # Created by https://www.toptal.com/developers/gitignore/api/r,macos,linux,python,windows,c++
@@ -10,6 +14,7 @@ output*/
 ### C++ ###
 # Prerequisites
 *.d
+metaSNV/*.cpp
 
 # Compiled Object files
 *.slo
@@ -302,3 +307,4 @@ $RECYCLE.BIN/
 *.lnk
 
 # End of https://www.toptal.com/developers/gitignore/api/r,macos,linux,python,windows,c++
+.vscode/settings.json
