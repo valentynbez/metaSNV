@@ -5,6 +5,7 @@ testdata/*
 output/*
 reference_output/*
 .github/
+*.ipynb
 
 
 # Standard files for OS and languages used in this project
